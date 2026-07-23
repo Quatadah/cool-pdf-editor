@@ -24,7 +24,7 @@ type LoadState =
 
 const MAX_FILE_SIZE = 80 * 1024 * 1024
 
-const loadPdfBook = () => import("@/components/pdf-book")
+const loadPdfBook = () => import("@/components/reader/pdf-book")
 const PdfBook = lazy(async () => ({
   default: (await loadPdfBook()).PdfBook,
 }))

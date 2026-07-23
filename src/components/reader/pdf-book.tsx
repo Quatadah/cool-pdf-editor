@@ -1,22 +1,11 @@
 import type { CSSProperties } from "react"
-import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ExpandIcon,
   FileUpIcon,
-  MousePointer2Icon,
   PaletteIcon,
-  SignatureIcon,
-  TypeIcon,
-  Undo2Icon,
   Volume2Icon,
   VolumeXIcon,
 } from "lucide-react"
@@ -24,23 +13,15 @@ import HTMLFlipBook from "react-pageflip"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import {
   Popover,
-  PopoverAnchor,
   PopoverContent,
   PopoverDescription,
   PopoverHeader,
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { Separator } from "@/components/ui/separator"
 import { Slider } from "@/components/ui/slider"
 import { PaperSoundEngine } from "@/lib/paper-sound"
 import {
@@ -48,6 +29,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+
+import type { AnnotationTool, PageAnnotation } from "./annotation-types"
+import { BookCover, BookPage } from "./book-leaves"
+import { PdfTools } from "./pdf-tools"
 
 type PageFlipApi = {
   flipNext: (corner?: "top" | "bottom") => void
@@ -67,111 +52,6 @@ type PdfBookProps = {
   pages: string[]
   onChooseAnother: () => void
 }
-
-type BookPageProps = {
-  imageUrl: string
-  index: number
-  annotationTool: AnnotationTool
-  annotations: PageAnnotation[]
-  onPlaceAnnotation: (pageIndex: number, x: number, y: number) => void
-}
-
-type AnnotationTool = "none" | "text" | "signature"
-
-type PageAnnotation = {
-  id: string
-  pageIndex: number
-  type: Exclude<AnnotationTool, "none">
-  text: string
-  x: number
-  y: number
-}
-
-const BookPage = forwardRef<HTMLDivElement, BookPageProps>(function BookPage(
-  { imageUrl, index, annotationTool, annotations, onPlaceAnnotation },
-  ref
-) {
-  return (
-    <div
-      ref={ref}
-      className="book-page"
-      data-density="soft"
-      data-page-side={index % 2 === 0 ? "right" : "left"}
-    >
-      <div className="book-page__paper">
-        <img src={imageUrl} alt={`PDF page ${index + 1}`} draggable={false} />
-        {annotations.map((annotation) => (
-          <span
-            key={annotation.id}
-            className="book-page__annotation"
-            data-annotation-type={annotation.type}
-            style={{ left: `${annotation.x}%`, top: `${annotation.y}%` }}
-          >
-            {annotation.text}
-          </span>
-        ))}
-        {annotationTool !== "none" && (
-          <button
-            type="button"
-            className="book-page__annotation-surface"
-            aria-label={`Place ${annotationTool === "signature" ? "signature" : "text"} on page ${index + 1}`}
-            onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              const bounds = event.currentTarget.getBoundingClientRect()
-              const x = ((event.clientX - bounds.left) / bounds.width) * 100
-              const y = ((event.clientY - bounds.top) / bounds.height) * 100
-              onPlaceAnnotation(index, x, y)
-            }}
-          />
-        )}
-        <span className="book-page__number" aria-hidden="true">
-          {index + 1}
-        </span>
-      </div>
-    </div>
-  )
-})
-
-type BookCoverProps = {
-  title: string
-  pageCount: number
-  side: "front" | "back"
-}
-
-const BookCover = forwardRef<HTMLDivElement, BookCoverProps>(function BookCover(
-  { title, pageCount, side },
-  ref
-) {
-  return (
-    <div
-      ref={ref}
-      className="book-page book-cover"
-      data-density="hard"
-      data-cover-side={side}
-    >
-      <div className="book-cover__surface">
-        {side === "front" ? (
-          <>
-            <span className="book-cover__edition">A Folio private edition</span>
-            <strong>{title}</strong>
-            <span className="book-cover__rule" />
-            <small>{pageCount} pages · Rendered locally</small>
-          </>
-        ) : (
-          <div className="book-cover__colophon">
-            <span className="brand-mark" aria-hidden="true">
-              <span />
-              <span />
-            </span>
-            <strong>Folio</strong>
-            <small>Made to be held.</small>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-})
 
 function useReducedMotion() {
   const [reduced, setReduced] = useState(false)
@@ -251,33 +131,6 @@ function IconAction({
         </Button>
       </TooltipTrigger>
       <TooltipContent side="top">{label}</TooltipContent>
-    </Tooltip>
-  )
-}
-
-function PdfToolAction({
-  label,
-  active,
-  children,
-  ...props
-}: React.ComponentProps<typeof Button> & {
-  label: string
-  active?: boolean
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          size="icon-lg"
-          variant={active ? "secondary" : "ghost"}
-          aria-label={label}
-          aria-pressed={active === undefined ? undefined : active}
-          {...props}
-        >
-          {children}
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side="right">{label}</TooltipContent>
     </Tooltip>
   )
 }
@@ -516,115 +369,17 @@ export function PdfBook({
           </Popover>
         </div>
 
-        <Popover
-          open={annotationTool !== "none"}
-          onOpenChange={(open) => {
-            if (!open) setAnnotationTool("none")
-          }}
-        >
-          <PopoverAnchor asChild>
-            <div className="pdf-tools" role="toolbar" aria-label="PDF tools">
-              <PdfToolAction
-                label="Pointer"
-                active={annotationTool === "none"}
-                onClick={() => setAnnotationTool("none")}
-              >
-                <MousePointer2Icon />
-              </PdfToolAction>
-              <Separator />
-              <PdfToolAction
-                label="Add text"
-                active={annotationTool === "text"}
-                onClick={() => setAnnotationTool("text")}
-              >
-                <TypeIcon />
-              </PdfToolAction>
-              <PdfToolAction
-                label="Sign PDF"
-                active={annotationTool === "signature"}
-                onClick={() => setAnnotationTool("signature")}
-              >
-                <SignatureIcon />
-              </PdfToolAction>
-              <Separator />
-              <PdfToolAction
-                label="Undo last annotation"
-                disabled={annotations.length === 0}
-                onClick={() =>
-                  setAnnotations((current) => current.slice(0, -1))
-                }
-              >
-                <Undo2Icon />
-              </PdfToolAction>
-            </div>
-          </PopoverAnchor>
-
-          <PopoverContent
-            className="pdf-tools__popover"
-            side="right"
-            align="center"
-            sideOffset={12}
-            onInteractOutside={(event) => event.preventDefault()}
-          >
-            <PopoverHeader>
-              <PopoverTitle>
-                {annotationTool === "signature" ? "Sign PDF" : "Add text"}
-              </PopoverTitle>
-              <PopoverDescription>
-                Enter the content, then click where it belongs on a page.
-              </PopoverDescription>
-            </PopoverHeader>
-
-            <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="annotation-content">
-                  {annotationTool === "signature" ? "Signature" : "Text"}
-                </FieldLabel>
-                <Input
-                  id="annotation-content"
-                  autoFocus
-                  autoComplete="off"
-                  value={
-                    annotationTool === "signature"
-                      ? signatureText
-                      : annotationText
-                  }
-                  placeholder={
-                    annotationTool === "signature"
-                      ? "Your full name"
-                      : "Type something…"
-                  }
-                  onChange={(event) => {
-                    if (annotationTool === "signature") {
-                      setSignatureText(event.target.value)
-                    } else {
-                      setAnnotationText(event.target.value)
-                    }
-                  }}
-                />
-                <FieldDescription>
-                  {annotationTool === "signature"
-                    ? "Rendered as ink on the page."
-                    : "You can place the same text more than once."}
-                </FieldDescription>
-              </Field>
-            </FieldGroup>
-
-            <div className="pdf-tools__popover-actions">
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={annotations.length === 0}
-                onClick={() => setAnnotations([])}
-              >
-                Clear all
-              </Button>
-              <Button size="sm" onClick={() => setAnnotationTool("none")}>
-                Done
-              </Button>
-            </div>
-          </PopoverContent>
-        </Popover>
+        <PdfTools
+          tool={annotationTool}
+          annotationText={annotationText}
+          signatureText={signatureText}
+          annotationCount={annotations.length}
+          onToolChange={setAnnotationTool}
+          onAnnotationTextChange={setAnnotationText}
+          onSignatureTextChange={setSignatureText}
+          onUndo={() => setAnnotations((current) => current.slice(0, -1))}
+          onClear={() => setAnnotations([])}
+        />
 
         <div
           className="book-pedestal"
